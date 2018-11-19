@@ -207,12 +207,18 @@ function Invoke-GDriveApiCall {
 
 		[Parameter()]
 		[ValidateNotNullOrEmpty()]
-		[string]$HTTPMethod = 'GET'
+		[string]$HTTPMethod = 'GET',
+
+		[Parameter()]
+		[ValidateNotNullOrEmpty()]
+		[string]$Uri
 	)
 
 	$ErrorActionPreference = 'Stop'
 
-	$uri = 'https://www.googleapis.com/drive/v3/{0}' -f $ApiCategory
+	if (-not $PSBoundParameters.ContainsKey('Uri')) {
+		$Uri = 'https://www.googleapis.com/drive/v3/{0}' -f $ApiCategory	
+	}
 
 	$invRestParams = @{
 		Method      = $HTTPMethod
@@ -224,11 +230,7 @@ function Invoke-GDriveApiCall {
 		'Authorization' = "Bearer $((Get-PSGoogleDocsApiAuthInfo).AccessToken)" 
 	}
 
-	if ($HTTPMethod -eq 'GET') {
-		$apiPayload.maxResults = 50
-		# $apiPayload.key = (Get-PSGoogleDocsApiAuthInfo).APIKey
-		
-	} else {
+	if ($HTTPMethod -ne 'GET') {
 		$invRestParams.Headers += @{ 
 			'Content-Type' = 'application/json'
 		}
@@ -270,7 +272,11 @@ function Invoke-GDriveApiCall {
 		}
 	}
 
-	$result.files
+	if ($result.files) {
+		$result.files
+	} else {
+		$result
+	}
 
 	if ($result.PSObject.Properties.Name -contains 'nextPageToken') {
 		Invoke-GDriveApiCall -PageToken $result.nextPageToken -Payload $Payload -ApiMethod $ApiMethod -ApiName $ApiName
@@ -282,18 +288,72 @@ function Get-File {
 	[CmdletBinding()]
 	param
 	(
-		# [Parameter(Mandatory, ParameterSetName = 'ByUsername')]
-		# [ValidateNotNullOrEmpty()]
-		# [string]$Username
+		[Parameter()]
+		[ValidateNotNullOrEmpty()]
+		[string]$Name
 	)
 
 	$ErrorActionPreference = 'Stop'
 
-	# $payload = @{
-	# 	part        = 'snippet,contentDetails'
-	# 	forUsername = $Username
-	# }
+	$invParams = @{
+		ApiCategory = 'files'
+	}
+	if ($PSBoundParameters.ContainsKey('Name')) {
+		$invParams.Payload = @{ 'q' = "name='$Name'"}
+	}
+	Invoke-GDriveApiCall @invParams
+}
+
+# function Export-File {
+# 	[OutputType('pscustomobject')]
+# 	[CmdletBinding()]
+# 	param
+# 	(
+# 		[Parameter(Mandatory, ValueFromPipeline)]
+# 		[ValidateNotNullOrEmpty()]
+# 		[pscustomobject]$File,
+
+# 		[Parameter()]
+# 		[ValidateNotNullOrEmpty()]
+# 		[ValidateSet('text/plain', 'text/html', 'application/zip', 'application/rtf', 'application/vnd.oasis.opendocument.text', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/epub+zip')]
+# 		[string]$MimeType
+# 	)
+
+# 	$ErrorActionPreference = 'Stop'
 	
-	# Invoke-GDriveApiCall -Payload $payload -ApiCategory 'files' -ApiMethod 'list'
-	Invoke-GDriveApiCall -ApiCategory 'files'
+# 	$uri = "https://www.googleapis.com/drive/v3/files/{0}/export?mimeType={1}" -f $File.id, [uri]::EscapeDataString($MimeType)
+# 	Invoke-GDriveApiCall -Uri $uri
+# }
+
+
+function Export-File {
+	[OutputType('pscustomobject')]
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[ValidateNotNullOrEmpty()]
+		[pscustomobject]$File,
+
+		[Parameter(Mandatory)]
+		[ValidateNotNullOrEmpty()]
+		[ValidateSet('HTML', 'HTMLZipped', 'PlainText', 'RichText', 'OpenOfficeDoc', 'MSWordDoc', 'EPUB')]
+		[string]$FileType
+	)
+
+	$ErrorActionPreference = 'Stop'
+
+	$typetoMimeMap = @{
+		HTML          = 'text/html'
+		HTMLZipped    = 'application/zip'
+		PlainText     = 'text/plain'
+		RichText      = 'application/rtf'
+		OpenOfficeDoc = 'application/vnd.oasis.opendocument.text'
+		MSWordDoc     = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+		EPUB          = 'application/epub+zip'
+	}
+	$mimeType = $typetoMimeMap[$FileType]
+
+	$uri = "https://www.googleapis.com/drive/v3/files/{0}/export?mimeType={1}" -f $File.id, [uri]::EscapeDataString($mimeType)
+	Invoke-GDriveApiCall -Uri $uri
 }
